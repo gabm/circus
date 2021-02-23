@@ -1,11 +1,10 @@
 import json
 import subprocess
-
+import os
+from dataclasses import dataclass
 
 from circus.commands.base import Command
 from circus.exc import ArgumentError, MessageError
-from circus import logger
-import os
 from pathlib import Path
 
 
@@ -14,6 +13,15 @@ def path_equal(p1, p2):
         return os.path.normcase(os.path.abspath(p1)) == os.path.normcase(os.path.abspath(p2))
     else:
         return os.path.abspath(p1) == os.path.abspath(p2)
+
+
+@dataclass
+class Link2Tool:
+    is_node: bool
+    prefix: str
+    environment: str
+    name: str
+    executable: str
 
 
 class Link2(Command):
@@ -49,9 +57,7 @@ class Link2(Command):
 
     def __init__(self):
         super(Link2, self).__init__()
-        self.link2_nodes = dict()
-        self.well_known_tools = dict()
-        self.all_prefixes = dict()
+        self.link2_tools = list()
 
         ret = subprocess.run(["conda", "info", "--json"], capture_output=True, encoding="utf-8")
         if ret.returncode != 0:
@@ -71,26 +77,21 @@ class Link2(Command):
                 # skip if its not in a standard env dir
                 continue
 
-            self.all_prefixes[env_key] = p
-            nodes_in_env = Link2.index_link2_nodes(p)
-            tools_in_env = Link2.index_well_known_tools(p)
+            nodes_in_env = Link2.index_link2_nodes(p, env_key)
+            tools_in_env = Link2.index_well_known_tools(p, env_key)
 
-            if len(nodes_in_env) > 0:
-                self.link2_nodes[env_key] = nodes_in_env
+            self.link2_tools += nodes_in_env
 
-            for (tool, path) in tools_in_env.items():
+            for tool in tools_in_env:
                 # if its not already captured by a "node"
-                if not any((path == p) for (_, p) in nodes_in_env.items()):
-                    if env_key not in self.well_known_tools:
-                        self.well_known_tools[env_key] = dict()
-                    self.well_known_tools[env_key][tool] = path
+                if not any((tool.executable == t.executable) for t in nodes_in_env):
+                    self.link2_tools.append(tool)
 
-        print(self.link2_nodes)
-        print(self.well_known_tools)
+        print(self.link2_tools)
 
     @staticmethod
-    def index_link2_nodes(prefix):
-        result = dict()
+    def index_link2_nodes(prefix, environment_name):
+        result = list()
 
         # find nodes by specification
         share_dir = os.path.join(prefix, "share", "link2", "static_assets")
@@ -109,16 +110,22 @@ class Link2(Command):
 
                     exe_file = os.path.join(bin_dir, node_name)
                     if os.path.isfile(exe_file):
-                        result[node_name] = exe_file
+                        result.append(Link2Tool(
+                            is_node=True,
+                            executable=exe_file,
+                            prefix=prefix,
+                            environment=environment_name,
+                            name=node_name
+                        ))
             except Exception as e:
                 continue
 
         return result
 
     @staticmethod
-    def index_well_known_tools(prefix):
+    def index_well_known_tools(prefix, environment_name):
         # this is to find tools that are not nodes
-        result = dict()
+        result = list()
         allowed_prefixes = ["link2-", "ld-node-"]
         disallowed_suffixes = ["-test", ".sig"]
         exceptions = ["link2-license-tool"]
@@ -129,7 +136,13 @@ class Link2(Command):
             if any(path.name.startswith(pre) for pre in allowed_prefixes) and \
                     not any(path.name == e for e in exceptions) and \
                     not any(path.name.endswith(suf) for suf in disallowed_suffixes):
-                result[path.name] = str(path.absolute())
+                result.append(Link2Tool(
+                    is_node=False,
+                    executable=str(path.absolute()),
+                    prefix=prefix,
+                    environment=environment_name,
+                    name=path.name
+                ))
 
         return result
 
@@ -147,35 +160,70 @@ class Link2(Command):
             response["result"] = self.handle_list_tools()
         elif cmd == "add-node":
             response["result"] = self.handle_add_node(arbiter, cmd_args[0], cmd_args[1], cmd_args[2], cmd_args[3])
+        elif cmd == "add-tool":
+            response["result"] = self.handle_add_tool(arbiter, cmd_args[0], cmd_args[1], cmd_args[2], cmd_args[3])
         return response
 
     def handle_list_nodes(self):
         result = dict()
-        for env, nodes in self.link2_nodes.items():
-            for (name, _) in nodes.items():
-                if name not in result:
-                    result[name] = list()
-                result[name].append(env)
+        for tool in self.link2_tools:
+            if not tool.is_node:
+                continue
+
+            if tool.name not in result:
+                result[tool.name] = list()
+            result[tool.name].append(tool.environment)
+
         return result
 
     def handle_list_tools(self):
         result = dict()
-        for env, tools in self.well_known_tools.items():
-            for (name, _) in tools.items():
-                if name not in result:
-                    result[name] = list()
-                result[name].append(env)
+        for tool in self.link2_tools:
+            if tool.is_node:
+                continue
+
+            if tool.name not in result:
+                result[tool.name] = list()
+            result[tool.name].append(tool.environment)
+
         return result
 
+    def find_node_entry(self, is_node, name, env_name):
+        for tool in self.link2_tools:
+            if tool.is_node != is_node:
+                continue
+            if tool.environment != env_name:
+                continue
+            if tool.name != name:
+                continue
+            return tool
+        return None
+
     def handle_add_node(self, arbiter, instance_name, node, env, instance_file):
-        if env not in self.link2_nodes:
-            raise MessageError(env + " is not a valid conda env")
+        tool = self.find_node_entry(True, node, env)
 
-        node_env = self.link2_nodes.get(env)
-        if node not in node_env:
-            raise MessageError(node + " is not a valid node in env " + env)
+        if tool is None:
+            raise MessageError("The node " + node + " in env " + env + " has not been found.")
 
-        command = "/home/gabm/dev/os/circus/run_in.sh " + "/home/gabm/miniconda3/envs/" + env + " " + node + " --instance-file " + instance_file
+        command = "/home/gabm/dev/os/circus/run_in.sh " + tool.prefix + " " + tool.executable + " --instance-file " + instance_file
+        print("Command to run: " + command)
+
+        options = {
+            'respawn': False,
+            'autostart': False,
+            'copy_env': True,
+            'stop_signal': 2
+        }
+        watcher = arbiter.add_watcher(instance_name, command, **options)
+        return "ok"
+
+    def handle_add_tool(self, arbiter, instance_name, tool_name, env, args):
+        tool = self.find_node_entry(False, tool_name , env)
+
+        if tool is None:
+            raise MessageError("The tool " + tool_name + " in env " + env + " has not been found.")
+
+        command = "/home/gabm/dev/os/circus/run_in.sh " + tool.prefix + " " + tool.executable + " " + args
         print("Command to run: " + command)
 
         options = {
@@ -219,7 +267,7 @@ class Link2(Command):
         cmd = props.get("subcommand")
         cmd_args = props.get("subcommand-args")
 
-        if cmd not in ["list-nodes", "list-tools", "add-node"]:
+        if cmd not in ["list-nodes", "list-tools", "add-node", "add-tool"]:
             raise ArgumentError("Unknown command " + cmd)
 
         if cmd.startswith("list-"):
@@ -227,4 +275,8 @@ class Link2(Command):
                 raise ArgumentError("the list commands don't take arguments")
         elif cmd == "add-node":
             if len(cmd_args) != 4:
-                raise ArgumentError("The add-node command takes three arguments (add-node <instance-name> <node-name> <env-name> <instance-file>)")
+                raise ArgumentError("The add-node command takes four arguments (add-node <instance-name> <node-name> <env-name> <instance-file>)")
+        elif cmd == "add-tool":
+            if len(cmd_args) != 4:
+                raise ArgumentError(
+                    "The add-node command takes four arguments (add-tool <instance-name> <tool-name> <env-name> [args])")
