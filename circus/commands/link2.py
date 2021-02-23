@@ -175,8 +175,7 @@ class Link2(Command):
         if node not in node_env:
             raise MessageError(node + " is not a valid node in env " + env)
 
-        #command = "conda activate " + env + " && " + node + " --instance-file " + instance_file
-        command = "/tmp/run_in.sh " + "/home/gabm/miniconda3/envs/" + env + " " + node + " --instance-file " + instance_file
+        command = "/home/gabm/dev/os/circus/run_in.sh " + "/home/gabm/miniconda3/envs/" + env + " " + node + " --instance-file " + instance_file
         print("Command to run: " + command)
 
         options = {
