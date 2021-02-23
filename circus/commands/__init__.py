@@ -23,7 +23,8 @@ from circus.commands import (   # NOQA
     start,
     stats,
     status,
-    stop
+    stop,
+    link2
 )
 
 from circus.commands.base import get_commands, ok, error   # NOQA
