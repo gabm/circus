@@ -239,7 +239,7 @@ class Link2(Command):
         # msg is what is returned by the execute method.
         # this method is used to format the response for a console (it is
         # used for instance by circusctl to print its messages)
-        print(msg)
+        return str(msg)
 
     def message(self, *args, **opts):
         # message handles console input.
