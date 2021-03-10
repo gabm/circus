@@ -84,7 +84,6 @@ class Link2(Command):
                 if not any((tool.executable == t.executable) for t in nodes_in_env):
                     self.link2_tools.append(tool)
 
-        print(self.link2_tools)
 
     @staticmethod
     def index_link2_nodes(prefix, environment_name):
@@ -202,8 +201,7 @@ class Link2(Command):
         if tool is None:
             raise MessageError("The node " + node + " in env " + env + " has not been found.")
 
-        command = "/home/gabm/dev/os/circus/circus_run_in_env.sh " + tool.prefix + " " + tool.executable + " --instance-file " + instance_file
-        print("Command to run: " + command)
+        command = "circus_run_in_env.sh " + tool.prefix + " " + tool.executable + " --instance-file " + instance_file
 
         options = {
             'respawn': False,
@@ -220,8 +218,7 @@ class Link2(Command):
         if tool is None:
             raise MessageError("The tool " + tool_name + " in env " + env + " has not been found.")
 
-        command = "/home/gabm/dev/os/circus/circus_run_in_env.sh " + tool.prefix + " " + tool.executable + " " + args
-        print("Command to run: " + command)
+        command = "circus_run_in_env.sh " + tool.prefix + " " + tool.executable + " " + args
 
         options = {
             'respawn': False,
