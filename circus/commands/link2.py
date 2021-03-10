@@ -27,12 +27,9 @@ class Link2Tool:
 class Link2(Command):
 
         
-    """It is a good practice to describe what the class does here.
+    """This command allows link2-specific operations: list-nodes, list-tools, add-node, add-tool
 
-    Have a look at other commands to see how we are used to format
-    this text. It will be automatically included in the documentation,
-    so don't be afraid of being exhaustive, that's what it is made
-    for.
+    The tools and nodes are running in their respective conda environment.
     """
     # all the commands inherit from `circus.commands.base.Command`
 
@@ -205,7 +202,7 @@ class Link2(Command):
         if tool is None:
             raise MessageError("The node " + node + " in env " + env + " has not been found.")
 
-        command = "/home/gabm/dev/os/circus/run_in.sh " + tool.prefix + " " + tool.executable + " --instance-file " + instance_file
+        command = "/home/gabm/dev/os/circus/circus_run_in_env.sh " + tool.prefix + " " + tool.executable + " --instance-file " + instance_file
         print("Command to run: " + command)
 
         options = {
@@ -223,7 +220,7 @@ class Link2(Command):
         if tool is None:
             raise MessageError("The tool " + tool_name + " in env " + env + " has not been found.")
 
-        command = "/home/gabm/dev/os/circus/run_in.sh " + tool.prefix + " " + tool.executable + " " + args
+        command = "/home/gabm/dev/os/circus/circus_run_in_env.sh " + tool.prefix + " " + tool.executable + " " + args
         print("Command to run: " + command)
 
         options = {
