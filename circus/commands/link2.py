@@ -15,6 +15,12 @@ def path_equal(p1, p2):
         return os.path.abspath(p1) == os.path.abspath(p2)
 
 
+def get_conda_script():
+    if os.name == "nt":
+        return "circus_run_in_env.bat"
+    else:
+        return "circus_run_in_env.sh"
+
 @dataclass
 class Link2Tool:
     is_node: bool
@@ -201,7 +207,7 @@ class Link2(Command):
         if tool is None:
             raise MessageError("The node " + node + " in env " + env + " has not been found.")
 
-        command = "circus_run_in_env.sh " + tool.prefix + " " + tool.executable + " --instance-file " + instance_file
+        command = get_conda_script() + " " + tool.prefix + " " + tool.executable + " --instance-file " + instance_file
 
         options = {
             'respawn': False,
@@ -218,7 +224,7 @@ class Link2(Command):
         if tool is None:
             raise MessageError("The tool " + tool_name + " in env " + env + " has not been found.")
 
-        command = "circus_run_in_env.sh " + tool.prefix + " " + tool.executable + " " + args
+        command = get_conda_script() + " " + tool.prefix + " " + tool.executable + " " + args
 
         options = {
             'respawn': False,
@@ -228,8 +234,6 @@ class Link2(Command):
         }
         watcher = arbiter.add_watcher(instance_name, command, **options)
         return "ok"
-
-
 
     def console_msg(self, msg):
         # msg is what is returned by the execute method.
